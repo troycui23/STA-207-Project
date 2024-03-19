@@ -1,0 +1,580 @@
+---
+title: "The Effect of Class Size and Teacher's Aide on Student's Math Score: Evidence Based on Project STAR"
+author: "Zhengqian Cui"
+date: "18 March 2024"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: true
+    number_sections: false
+    toc: true
+    toc_float:
+      collapsed: false
+    fig caption: true
+  pdf_document:
+    toc: true
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+```{r warning=FALSE, include=FALSE}
+library(foreign)
+library(dplyr)
+library(plotly)
+library(ggplot2)
+library(lme4)
+library(tidyverse)
+library(hrbrthemes)
+library(viridis)
+library(gghalves)
+
+```
+
+------------------------------------------------------------------------
+
+# Abstract
+
+Based on the project STAR's data, we analysis whether small classes' students score significantly higher than those in regular classes. Not consistent to the result of the initial analysis, we get negative conclusion this time and the reason will be discussed in this report.
+
+------------------------------------------------------------------------
+
+# Introduction
+
+Project STAR (Student-Teacher Achievement Ratio) is an educational experiment conducted in Tennessee, aiming at assessing the effect of class size and the teacher's aide, on the academic achievement of the students. In our introduction, the background information is obtained from Mosteller (1995). Some schools in Tennessee with proper facilities (for example, enough classrooms to conduct the experiment) were enrolled in the experiment, and during each school year there is only one grade under experiments. Within a school, in order to eliminate the potential bias caused by the confounding factors that were not focused, student and teachers were randomly assigned to classes. There are three types of classes: `SMALL CLASS`, `REGULAR CLASS` and `REGULAR + AIDE CLASS`.
+
+Although it is with our common sense that the small class should be associated with the best academic performance of students, some researchers still suspect the generality of this sense. One of the reasons is for smaller classes, not only the number of students becomes smaller, but the teaching strategy, the student's reliability to teacher and other assistance, even the judgement about everyone's responsibility among the educators and students may be changed, and then the variability of student's academic performance across the class size will be influenced by too many factors, which is hard to predict (Sohn, 2014).
+
+As a result, in our project, we need to care about far more than the records about students' math scores and the type of class they attended. But, many other confounding factors and caveats need to be considered so that the interpretation will be more convincing. For this project, we have a **primary** question of interest that whether there exists significant differences in the math scaled scores in grade 1 across the type of classes. The consequent **secondary** question of interest is which of the three class types is associated with the significantly highest math scores. Particularly for the question we concern about in our project, the math scores of first grade students are based on one SAT test.
+
+# Background
+
+The data set, obtained from *the Harvard Dataverse*, contains totally 11,601 observations with 379 variables. The unit of observation is one student, and the variables include the ID of the student, some demographic information about the student (for example, the race, the year of birth, the month of a year of birth), and records about each of the four grades (from grade K to grade 3) in the project STAR. Not all of the students participated from grade K to grade 3, so there are many missing values here. Within each school year, the records mainly come from three perspectives:
+
+-   Student. Variables include whether a student participated STAR in the particular school grade, the id of the school he attended that year, the id of teacher who taught him that year, the class type and class size that year, the standardized score in tests in this year in different subjects (math, reading, listening, etc.), the qualification of free lunch this year and so on.
+
+-   Teacher. Variables contains the year of experience of that teacher, the level of the career ladder, the highest degree and so on.
+
+-   School. Variables mainly contains the urbanity, in other word, the location of the school.
+
+The initial definition of small classes is those with class size in the interval [13, 17], and the regular (with or without aide) should have class sizes in [22, 25] (Mosteller, 1995). However, the data shows some violence of class type based on the records of class size. We will discuss about that issue later. As a result, we include not only the class type in grade 1 but also the class type in grade 1 in our potential predictor variables.
+
+Now, we need to figure out clearly what we are concerning about. Per the primary and questions of interest, the student's score in math in grade 1, the class type he attended in grade 1 must be included as our variables of interest in the future model. Then, since STAR only randomly assigned teachers and students within schools, but the choice of schools in the whole project is not random, nor the homogeneity across schools is guaranteed by our understanding of the data, we may need the id of school. Also, although the teacher is said to be assigned randomly within a school, there are averagely no more than 10 teachers in a school in this project in grade 1 (the specific descriptive numbers will be shown later), so we think that the heterogeneity of teachers may influence the student's learning outcome even if we model all the students. Then, the id of teacher is also included. Moreover, which is even more important, is that we care the difference of **math score in grade 1** across class types. In a sense of causal inference, we should remove the confounding effects as much as we can, and the two main resources of confounding effects are coming from:
+
+-   The different starting point since grade K. Many of the students enrolling in grade 1 did not attend kindergarten. The ones who attended kindergarten may not attended the same class type in grade 1 and grade K, nor their performances in grade K are the same. So, the starting points of math learning of these students at the beginning of grade 1 are different, and what we are interested exactly is the learning outcome in grade 1, excluding the influences of grade K. So, we include the class type in grade K and the math score in grade K as potential explanatory variables.
+
+-   The different studying ability in grade 1. We may divide the learning outcome in grade 1 from two sources, one is the teaching outcome of the teacher (and the whole class), while the other is the ability of learning of an individual student when he was in grade 1. What we care about is only the former one, since the project STAR should aim at providing insights of deciding optimal class sizes and the necessity of aides, but not assessing the difference of intelligence of students. So, we include one of the other subjects' test score, specifically, the reading score in grade 1, to represent the overall intelligence of a student. The reason why we do not introduce other scores in grade 1, such as listening score, is that all scores other than math score are associated with language ability, and we only select one as a representation, to make the model simpler without too much loss of information, and to avoid multi-collinearity.
+
+Also, some demographic information, including the race and the qualification of free lunch of each student are included, in order to adjust for the confounding of the student's social status.
+
+Since the performance and status of a student in grade 2 and 3 should not have effect on his performance in grade 1, we do not need to include anything about grade 2 or 3.
+
+Up to now, all the potential variables of our interest are determined, and then we will conduct descriptive analysis based on them to decide the model we build to solve our question of interest.
+
+## Notice about the experimental design
+
+The most obvious advantage of the experimental design is that it randomly assigned teachers and students to class types within schools. This makes the experiment more like a stratified sampling when the homogeneity across schools is theoretically impossible. Such design allows more difference between schools while keeping the comparison of class types among all the students more robust (at least ideally). However, there are still some problems decreasing the level of evidence of this experiment, such as:
+
+-   The violation of class size and the class type, which is mentioned earlier. When a small class is not always "small enough", or a regular class is too small, the result of our comparison is not so convincing.
+
+-   The transfer of class types between grades. For those who attended both grade K and 1, the class type may be different, and we do not know the exact reason. One probable explanation is non-compliance, in other words, maybe some student's parents did not allow him to stay in the regular class after grade K when many of the parents thought a small class would be better. In reality, the school could not enforce a student to stay in a regular class. This may make the students in grade 1 not completely randomly assigned into class types, which breaks the advantage of the experimental design.
+
+-   The different proportion of students across the three class types among the schools. To make the experiment more like a stratified sampling, which we are happy to see, within each school, the proportion of students in the three class types should keep a similar value. However, we find that 4 schools, respectively identified as "244278", "244796", "244736", and "244839", did not have all of the three type of classes in grade 1, which means the basic structure of the experimental design was violated.
+
+## Caveats in the initial analysis
+
+In the initial analysis, we treat the class as the unit of observation, by aggregating students by the id of teacher in grade 1, and then compute the average math scores in grade 1 within each "aggregated" class. The ANOVA was done by treating the average math score as the response, and introducing class type as a fixed effect, school id as a random effect. Although it found that the small class is associated with the highest math score significantly, the main caveats include:
+
+-   The overall fit of the model, in a sense of a linear regression, is not good, and the diagnosis of residual plots showed that there is some pattern remained that was not captures by the model. So, we may revise the model to firstly explain more variation of the response, and then focus on the effect of class type to make multiple comparison.
+
+-   Nothing about the student's basic knowledge, intelligence and social status were considered. As a result, the inference can is kind of rough. As a remedy, we prefer to treat each individual student as the unit of observation this time, as doing so will mike it more convenient to adjust the demographic information of students.
+
+Based on these thoughts above, we may start our main analysis.
+
+# Descriptive analysis
+
+```{r warning=FALSE, include=FALSE}
+star_initial <- read.spss("STAR_Students.sav", to.data.frame = TRUE)
+star <- read.spss("STAR_Students.sav", to.data.frame = TRUE)
+star <- star[, c("stdntid", "gender", "race", "birthmonth", "birthyear", 
+                 "FLAGSGK", "FLAGSG1", "flaggk", "flagg1",
+                 "gkclasstype", "g1classtype", 
+                                       "gkclasssize", "g1classsize",
+                 "g1thighdegree", "g1tcareer", "g1tyears",
+                 "g1treadss", "g1tlistss", "g1wordskillss", 
+                                       "gktmathss", "g1tmathss", "g1surban", 
+                                       "g1freelunch", "gkfreelunch", 
+                                       "g1tchid", 
+                                       "g1schid")]
+
+star[,c("gender", "race", "birthmonth", "birthyear", 
+                 "FLAGSGK", "FLAGSG1", "flaggk", "flagg1",
+                 "gkclasstype", "g1classtype","g1thighdegree", "g1tcareer",
+              "g1surban", 
+                                       "g1freelunch", "gkfreelunch", 
+                                       "g1tchid", 
+                                       "g1schid")] <- lapply(star[,c("gender", "race", "birthmonth", "birthyear", 
+                 "FLAGSGK", "FLAGSG1", "flaggk", "flagg1",
+                 "gkclasstype", "g1classtype","g1thighdegree", "g1tcareer",
+              "g1surban", 
+                                       "g1freelunch", "gkfreelunch", 
+                                       "g1tchid", 
+                                       "g1schid")], 
+              factor)
+
+```
+
+First, we look at some summary statistics for each variable solely. Below is the number of missing values (out of the 11,601 observations) of some of variables of interest.
+
+| Grade 1 math score | Race | Grade 1 teacher id | Grade 1 school id | Grade 1 class type | Grade 1 class size | Grade 1 free lunch |
+|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
+| 5,053              | 134  | 4,772              | 4,772             | 4,772              | 4,772              | 4,951              |
+
+We can see that there are some students attending grade 1 but not available for the math score in grade 1, which is also a disadvantage of the experiment, since the missing math scores were probably not missing at random, for example, the students with poor math performance may be less willing to take a math test.
+
+Some other things deserving notice include:
+
+- Although there are 6 levels of race, most of the students were either black (4,180 cases) or white (7,200 cases).
+
+- The year of birth of students ranges from 1977 to 1981. We should note that the experiment was only conducted in one grade for each year, so the students attended grade 1 in the same year. That means the age when they were in grade 1 was not the same, and some of them were far too young or old for grade 1 (taking it into account that 4 years' difference is a big difference for a grade 1 student). Most of the students were born in 1979 or 1980.
+
+- The distribution of class type in grade 1 is as follows.
+
+| SMALL | REGULAR | REGULAR + AIDE |
+| ----- | ------- | -------------- |
+| 1,925 | 2,584   | 2,320          |
+
+- The proportion of students with or without free lunch is about half to half, which means this may be a good indicator of poverty, in a sence of model fitting.
+
+```{r warning=FALSE, include=FALSE}
+sum(is.na(star))
+
+sapply(star, function(x) sum(is.na(x)))
+
+summary(star)
+```
+
+Then, we have a look about the distribution of math score in grade 1, as shown below. The skewness and kurtosis are 0.29 and 3.04 respectively, indicating that the distribution is not far from normality. 
+
+```{r echo=FALSE, warning=FALSE}
+
+star.na.omit.1 <- star[complete.cases(star[ , c("g1classtype", 
+                                                "g1schid", "g1tchid",                                               "g1tmathss")]), ]
+  
+plot(density(star.na.omit.1$g1tmathss), main = "Density plot of Grade 1 math score", 
+    xlab = "Math score")
+
+library(moments)
+# skewness(star.na.omit.1$g1tmathss)
+# kurtosis(star.na.omit.1$g1tmathss)
+```
+
+Then, we do some exploratory analyses based on two or three variables simultaneously. 
+
+```{r warning=FALSE, include=FALSE}
+# # table of availability of grade k and 1 (in program and with score)
+# table(star$FLAGSGK, star$FLAGSG1, dnn = c("k", "1"), useNA = "ifany")
+# table(star$gkclasstype, star$g1classtype, dnn = c("k", "1"), useNA = "ifany")
+# 
+# star$gkclasstype <- factor(star$gkclasstype, 
+#                            levels = c("SMALL CLASS", "REGULAR CLASS", 
+#                                       "REGULAR + AIDE CLASS", "NO"))
+
+
+
+star_consistent <- subset(star.na.omit.1, as.character(gkclasstype) == as.character(g1classtype))
+
+
+
+
+
+
+```
+
+```{r include=FALSE}
+# aggregate to class by tchid
+star.bytch <- star.na.omit.1%>%
+  group_by(g1tchid)%>%
+  summarize(MeanMath = mean(g1tmathss))
+
+star.tch.uniq <- star.na.omit.1 %>%
+  distinct(g1tchid, g1schid, g1classtype)
+
+star.bytch <- merge(star.bytch, star.tch.uniq,
+                    by = "g1tchid")
+
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+tpFrame <- star.bytch%>%
+  mutate(Grade1 = g1classtype)
+
+ordercolors<-c("coral1","lightslateblue","olivedrab3","goldenrod1","lightgray")
+ordercolors<-viridis(3)
+ggplot(data = tpFrame,
+       aes(x=Grade1, y=MeanMath, fill=Grade1)) +
+    geom_half_violin(side = "r", color=NA, alpha=0.35) +
+    geom_half_boxplot(side = "r", errorbar.draw = FALSE, width=0.3, linewidth=0.5) +
+    geom_half_point_panel(side = "l", shape=21, size=3, color="white") +
+    scale_fill_manual(values = ordercolors) +
+    scale_y_continuous(limits = c(400, 700), expand = c(0, 0)) +
+#    scale_x_discrete(labels = c('SMALL','REGULAR','REGULAR + AIDE')) +
+    labs(y="Mean math score",x="Grade 1 class type") +
+    ggtitle("Mean math score v.s. Grade 1 class type") + 
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position = "bottom",
+          axis.title = element_text(size = 16, color = "black"),
+          axis.text = element_text(size=13, color = "black"))
+```
+
+
+
+```{r echo=FALSE, warning=FALSE}
+tpFrame <- star.na.omit.1%>%
+  mutate(Grade1 = g1classtype, MathScore = g1tmathss)
+
+ordercolors<-c("coral1","lightslateblue","olivedrab3","goldenrod1","lightgray")
+ordercolors<-viridis(4)
+ggplot(data = tpFrame,
+       aes(x=Grade1, y=MathScore, fill=Grade1)) +
+    geom_half_violin(side = "r", color=NA, alpha=0.35) +
+    geom_half_boxplot(side = "r", errorbar.draw = FALSE, width=0.2, linewidth=0.5) +
+    geom_half_point_panel(side = "l", shape=21, size=3, color="white") +
+    scale_fill_manual(values = ordercolors) +
+    scale_y_continuous(limits = c(400, 700), expand = c(0, 0)) +
+    scale_x_discrete(labels = c('SMALL','REGULAR','REGULAR + AIDE')) +
+    labs(y="Math score",x="Grade 1 class type") +
+    ggtitle("Math score v.s. Grade 1 class type") + 
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position = "bottom",
+          axis.title = element_text(size = 16, color = "black"),
+          axis.text = element_text(size=13, color = "black"))
+```
+
+Nearest our question of interest, we see the plot of math score across class types. Intuitively, small classes have the highest score, regular ones with aides rank second, and regular classes are associated with lowest scores.
+
+```{r echo=FALSE, warning=FALSE}
+tpFrame <- star.na.omit.1%>%
+  mutate(GradeK = gkclasstype, MathScore = g1tmathss)
+
+ordercolors<-c("coral1","lightslateblue","olivedrab3","goldenrod1","lightgray")
+ordercolors<-viridis(4)
+ggplot(data = tpFrame,
+       aes(x=GradeK, y=MathScore, fill=GradeK)) +
+    geom_half_violin(side = "r", color=NA, alpha=0.35) +
+    geom_half_boxplot(side = "r", errorbar.draw = FALSE, width=0.2, linewidth=0.5) +
+    geom_half_point_panel(side = "l", shape=21, size=3, color="white") +
+    scale_fill_manual(values = ordercolors) +
+    scale_y_continuous(limits = c(400, 700), expand = c(0, 0)) +
+    scale_x_discrete(labels = c('SMALL','REGULAR','REGULAR + AIDE', "NO")) +
+    labs(y="Grade 1 math score",x="Grade K class type") +
+    ggtitle("Grade 1 math score v.s. Grade K class type") + 
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position = "bottom",
+          axis.title = element_text(size = 16, color = "black"),
+          axis.text = element_text(size=13, color = "black"))
+```
+
+Then, we see how the class type of grade K affects math score in grade 1. Here, "NO" means no record for grade K class type, mainly because a student did not attend kindergarten. Intuitively, small classes' students still performed the best in grade 1's math, while the ones who did not attend kindergarten performed the worst. This suggests that we may introduce the class type in grade K in the model to adjust its effect on the math score in grade 1.
+
+```{r echo=FALSE, warning=FALSE}
+tpFrame <- star.na.omit.1%>%
+  mutate(BirthMonth = birthmonth, MathScore = g1tmathss)
+
+ordercolors<-viridis(12)
+ggplot(data = tpFrame,
+       aes(x=BirthMonth, y=MathScore, fill=BirthMonth)) +
+    geom_half_violin(side = "r", color=NA, alpha=0.35) +
+    geom_half_boxplot(side = "r", errorbar.draw = FALSE, width=0.2, linewidth=0.5) +
+    geom_half_point_panel(side = "l", shape=21, size=3, color="white") +
+    scale_fill_manual(values = ordercolors) +
+    scale_y_continuous(limits = c(400, 700), expand = c(0, 0)) +
+#    scale_x_discrete(labels = c('SMALL','REGULAR','REGULAR + AIDE', "NO")) +
+    labs(y="Grade 1 math score",x="Month of birth") +
+    ggtitle("Grade 1 math score v.s. month of birth in a year") + 
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position = "bottom",
+          axis.title = element_text(size = 16, color = "black"),
+          axis.text = element_text(size=8, color = "black"), 
+          axis.text.x = element_text(angle = 45))
+```
+
+This suggests that for the ones born in different month of a year, the performance may differ. However, the pattern is not so obvious. One possible explanation is the kids attended school in a circle of year, and for each year, the new students' actual ages (in months) vary mainly by the birth month. This may cause much difference when the student is vary young. 
+
+```{r echo=FALSE, warning=FALSE}
+tpFrame <- star.na.omit.1%>%
+  mutate(BirthYear = birthyear, MathScore = g1tmathss)
+
+ordercolors<-viridis(5)
+ggplot(data = tpFrame,
+       aes(x=BirthYear, y=MathScore, fill=BirthYear)) +
+    geom_half_violin(side = "r", color=NA, alpha=0.35) +
+    geom_half_boxplot(side = "r", errorbar.draw = FALSE, width=0.2, linewidth=0.5) +
+    geom_half_point_panel(side = "l", shape=21, size=3, color="white") +
+    scale_fill_manual(values = ordercolors) +
+    scale_y_continuous(limits = c(400, 700), expand = c(0, 0)) +
+#    scale_x_discrete(labels = c('SMALL','REGULAR','REGULAR + AIDE', "NO")) +
+    labs(y="Grade 1 math score",x="Year of birth") +
+    ggtitle("Grade 1 math score v.s. year of birth") + 
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position = "bottom",
+          axis.title = element_text(size = 16, color = "black"),
+          axis.text = element_text(size=12, color = "black"), 
+          axis.text.x = element_text(angle = 0))
+```
+
+The birth year shows more obvious pattern. Generally, the math score is higher for the ones born later. This is contrary to our common sense, but still can be explained: the few students who attended grade 1 later or earlier than the normal age may have some special conditions, for example, the ones born in 1977 but attended grade 1 in the experiment may have stayed in grade 1 several years due to poor academic performance, and the ones born in 1981 may attend grade 1 that year since they were found to be extremely intelligent. Another evidence supporting our guess is that the scores of whom born in 1980 are not higher (even a bit lower) than those in 1979. Both 1979 and 1980 are normal years of birth for the students in grade 1 that year.
+
+Then, we plot some heatmaps to show how the mean scores differ across combinations of categorical variables. Putting the cursor on each grid, we can see the mean score and the count of observations in that grid.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+tpFrame <- star.na.omit.1%>%
+  group_by(gkclasstype, g1classtype)%>%
+  summarize(MeanMathScore = mean(g1tmathss), count = n())
+
+tpFrame <- tpFrame %>%
+  mutate(text = paste0("Grade K class type: ", gkclasstype, 
+                       "\n", "Grade 1 class type: ", g1classtype, 
+                       "\n", "Mean math score in grade 1: ", MeanMathScore, 
+                       "\n", "Count:", count))
+
+p <- ggplot(tpFrame, aes(gkclasstype, g1classtype, fill= MeanMathScore, text=text)) + 
+  geom_tile() +
+  scale_fill_distiller(palette = "viridis", direction = 1) +
+  theme_ipsum() +
+  labs(x = "Grade K", y = "Grade 1") +
+  ggtitle("Mean math score in grade 1, under 
+          Grade K and Grade 1 class types") +
+  theme(plot.title = element_text(hjust = 0.5), 
+        axis.text=element_text(size=0.5), axis.text.x = element_text((angle=45)))
+
+ggplotly(p, tooltip="text")
+```
+
+Combining grade K and grade 1 class type, we see that the ones in small class in grade K tend to be less likely to transfer into regular classes, compared to those who transferred from regular classes to small classes, but the difference is not crucial. The more important finding is for the one who has no record for the grade K class type, it is much more likely that they were assigned to not small classes, compared to the proportion of those who attended grade K. Apart from this, we find those transferred from small to regular classes have obviously lower mean score than those stayed in regular classes across the two years, indicating that the students in small classes with too low scores tend to be "expelled" (for example, maybe by the peer pressure) into other classes more probably. This again shows that the randomness of the experiment is not so good. So, it enhances our confidence that the class type in grade K should be taken into account in our model. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+tpFrame <- star.na.omit.1%>%
+  group_by(g1freelunch, g1surban)%>%
+  summarize(MeanMathScore = mean(g1tmathss), count = n())
+
+tpFrame <- tpFrame %>%
+  mutate(text = paste0("Grade 1 free lunch: ", g1freelunch, 
+                       "\n", "Grade 1 school location: ", g1surban, 
+                       "\n", "Mean math score in grade 1: ", MeanMathScore, 
+                       "\n", "Count:", count))
+
+p <- ggplot(tpFrame, aes(g1freelunch, g1surban, fill= MeanMathScore, text=text)) + 
+  geom_tile() +
+  scale_fill_distiller(palette = "viridis", direction = 1) +
+  theme_ipsum() +
+  labs(x = "Grade 1 free lunch", y = "Grade 1 school location") +
+  ggtitle("Mean math score in grade 1, under Grade 1 
+          free lunch qualification and school location") +
+  theme(plot.title = element_text(hjust = 0.5), 
+        axis.text=element_text(size=0.5), axis.text.x = element_text((angle=45)))
+
+ggplotly(p, tooltip="text")
+```
+
+Combining the free lunch status and the school urbanity, we find that the qualification of free lunch seems to be associated tightly to the urbanity "INNER CITY". Actually, the definition of "INNER CITY" schools in STAR is those in which more than half students were qualified for free or discounted lunch. We can see the students with free lunch, or (and) in inner city schools, tend to scored lower. Since the sample size for students with unavailable free lunch information is too small, we are not confidence enough to draw conclusions from the third column of the heatmap.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+tpFrame <- star.na.omit.1%>%
+  group_by(g1freelunch, race)%>%
+  summarize(MeanMathScore = mean(g1tmathss), count = n())
+
+tpFrame <- tpFrame %>%
+  mutate(text = paste0("Grade 1 free lunch: ", g1freelunch, 
+                       "\n", "Student race: ", race, 
+                       "\n", "Mean math score in grade 1: ", MeanMathScore, 
+                       "\n", "Count:", count))
+
+p <- ggplot(tpFrame, aes(g1freelunch, race, fill= MeanMathScore, text=text)) + 
+  geom_tile() +
+  scale_fill_distiller(palette = "viridis", direction = 1) +
+  theme_ipsum() +
+  labs(x = "Grade 1 free lunch", y = "race") +
+  ggtitle("Mean math score in grade 1, under Grade 1 
+          free lunch qualification and race") +
+  theme(plot.title = element_text(hjust = 0.5), 
+        axis.text=element_text(size=0.5), axis.text.x = element_text((angle=45)))
+
+ggplotly(p, tooltip="text")
+```
+
+Combining race and free lunch status (actually only needing to emphasis on black and white samples), we find that black students were much more likely to be qualified for free lunch, and the ones who were black or (and) with free lunch tended to score lower.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+tpFrame <- star.na.omit.1%>%
+  group_by(g1freelunch, g1classtype)%>%
+  summarize(MeanMathScore = mean(g1tmathss), count = n())
+
+tpFrame <- tpFrame %>%
+  mutate(text = paste0("Grade 1 free lunch: ", g1freelunch, 
+                       "\n", "Grade 1 class type: ", g1classtype, 
+                       "\n", "Mean math score in grade 1: ", MeanMathScore, 
+                       "\n", "Count:", count))
+
+p <- ggplot(tpFrame, aes(g1freelunch, g1classtype, fill= MeanMathScore, text=text)) + 
+  geom_tile() +
+  scale_fill_distiller(palette = "viridis", direction = 1) +
+  theme_ipsum() +
+  labs(x = "Grade 1 free lunch", y = "Grade 1 class type") +
+  ggtitle("Mean math score in grade 1, under Grade 1 
+          free lunch qualification and class type") +
+  theme(plot.title = element_text(hjust = 0.5), 
+        axis.text=element_text(size=0.5), axis.text.x = element_text((angle=45)))
+
+ggplotly(p, tooltip="text")
+```
+
+In this heatmap, the proportion of students in 3 class types seem not to be strongly associated with the free lunch status, but for those who with free lunch or without, small classes seem to lead to better performances, and for those in the same type of classes, free lunch is associated with lower scores. The pattern seems not to have strong interaction between free lunch status and class type. 
+
+Up to now, we think we need some variable representing a student's economic and social status, and among the race, free lunch status and school urbanity, we think free lunch is the best, since the poverty of a student can be changed, and caring that is more important than caring the inherent feature of a person such as race; moreover, the urbanity relies on the students' free lunch status. 
+
+```{r echo=FALSE}
+plot(x = star$g1classsize, y = star$g1tmathss, xlab = "Grade 1 class size", 
+     ylab = "Grade 1 math score", main = "Grade 1 math score v.s. class size")
+abline((lm(star$g1tmathss~star$g1classsize)),col='green')
+```
+
+Here we are curious about whether the effect of exact class size on the score has some patterns. But in the scatter plot, we do not see more interesting pattern (for example, a cut off of scores when the size is bigger than a specific value) other than a linear trend that the scores decrease as the class size increase. As a result, in our model, class size is not introduced as a covariate, but only used in the sensitive analysis to adjust some classification of class type.
+
+```{r echo=FALSE}
+# par()
+# plot(x = star$gktmathss, y = star$g1tmathss, xlab = "Grade K math score", 
+#      ylab = "Grade 1 math score", main = "Grade 1 math score v.s. Grade K math score")
+# abline((lm(star$g1tmathss~star$gktmathss)),col='green')
+plot(x = star$g1treadss, y = star$g1tmathss, xlab = "Grade 1 reading score", 
+     ylab = "Grade 1 math score", main = "Grade 1 math score v.s. Grade 1 reading score")
+abline((lm(star$g1tmathss~star$g1treadss)),col='green')
+```
+
+This scatter plot suggests that reading score in grade 1 indeed positively correlate with math score in grade 1, so it is reasonable to be aware of the effect of language ability (and the intelligence behind it) on the math score.
+
+# Model and interpretation
+
+The mixed effect model is 
+
+$$Y_{i,j,k,l,m,n}=\mu+\alpha_i+\beta_j+\tau_k+\gamma_l+\epsilon_{i,j,k,l,n}$$
+
+where
+
+- $\mu$ is the mean of math scores of the grade 1 students.
+
+- $\alpha_{i}$ is the fixed effect of the grade 1 class type, and $i=1,2,3$ corresponds to `SMALL CLASS`, `REGULAR CLASS` and `REGULAR + AIDE CLASS` respectively.
+
+- $\beta_{j}$ is the fixed effect of free lunch status, and $j=1,2$ corresponds to with and without free lunch respectively.
+
+- $\tau_k$ is the fixed effect of the grade K class type, and $k=1,2,3,4$ corresponds to `SMALL CLASS`, `REGULAR CLASS` and `REGULAR + AIDE CLASS` and `NO` respectively.
+
+- $\gamma_l$ is the random effect of the $l$-th teacher,$\gamma_l \sim N(0, \sigma_l^2)$.
+
+- $n=6,435$ is an overall index for student, across the data. $\epsilon_{i,j,k,l,n} \sim N(0, \sigma^2)$ independently. 
+
+the main assumptions which are actually shown in the expressions above are:
+
+- The independence, normality and homoscedasticity of the error term $\epsilon_{i,j,k,l,n}$.
+
+- The normality of the random effect $\gamma_l$.
+
+Some explanations:
+
+- We do not include the reading score finally, as it explains too much variation of the observation, making other predictors too insignificant, which is not correct for answering our question of interest. Since the class type may have effect on math and reading score at the same time, adjusting reading score in the model will not only avoid the confounding effect of student intelligence, but also severely underestimate the effect of grade 1 class type.
+
+- School id is not introduced, since each teacher belongs to one school, and the information of school id is consequently covered by the term of teacher's id. Because we cannot pre-specify all the possible teachers and the effect of teacher is without interest, it is used as a random effect.
+
+
+```{r include=FALSE}
+fit.main <- lmer(g1tmathss ~ g1classtype + g1freelunch + gkclasstype
+                 + (1|g1tchid), 
+                 data = star.na.omit.1)
+
+summary(fit.main)
+```
+
+## The primary question of interest
+
+We perform likelihood ratio test for the significance of the fixed effects. As for our primary question of interest, the hypothesis is
+
+$$H_0: \alpha_i=0,\quad i= 1,2,3 \ \ v.s. \ \ H_A: \text{Not all the } \alpha\text{'s vanish.}$$ 
+The result (based on type 2 decomposition) is shown below.
+ 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(car)
+print(Anova(fit.main, type = "II"))
+```
+
+Grade 1 class type is encoded as `g1classtype`. Under a significance level 0.05, we reject the null hypothesis above, and we think there exist differences in math scaled scores in 1st grade across class types.
+
+## Secondary question of interest
+
+Here we perform Tukey's Honest Significant Difference test to test all the combinations of differences of the effect estimates of grade 1 class type. That is to test 
+
+$$
+H_{0,i,j}: \alpha_i - \alpha_j=0 \ \ v.s. \ \ H_{A,i,j}: \alpha_i-\alpha_j \neq 0, \ \ 1\leq i < j \leq 3
+$$
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(emmeans)
+emm_options(pbkrtest.limit = 6435)
+lmerTest.limit = 6435
+
+# Get the emmeans for model_factor_classtype2
+emm <- emmeans(fit.main, ~ g1classtype)
+
+# Get the pairwise comparisons with Tukey adjustment
+pairwise_comp <- pairs(emm, adjust = "tukey")
+pairwise_comp
+```
+
+The result shows that the small class has the highest score generally, but under an overall significance level 0.05, only the difference between small and regular classes is significant, but the difference between small class and aided regular class is not significant. So, we have not enough evidence to state that small class has significantly higher math scores over the other two types.
+
+# Sensitivity analysis
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+plot(fitted(fit.main), residuals(fit.main), xlab = "Fitted values", ylab = "Residuals", main = "Residual Plot")
+abline(h = 0, col = "red")
+
+qqnorm(resid(fit.main),main="Residual Q-Q plot")
+qqline(resid(fit.main))
+
+# residuals <- resid(model_individual)
+```
+
+The residual plots show that the normality and homoscedasticity are acceptable. So, the conclusion we made above should be convincing. 
+
+## Correct the definition of class type
+
+One possible sensitivity analysis is to use a new definition for grade 1 class type. For example, for the class with less than 17 students but labeled as regular, we re-define it into small class, and for the small class with actually over 22 students, we re-define it as regular. However, how to handle the classes with student numbers in [18,21] is not quite reasonable to decide. One possible method is not to change them. Then, we can compare the result with the main analysis above. But how to decide which model (between the main analysis and the sensitivity analysis) is better is problematic, so we donot give a specific conclusion here.
+
+## Discussion 
+
+The reason why there is noa a class type significantly scoring higher than the other two, which is not consistent with the finding in initial analysis, is that we introduce grade K class type into the model. We find that the students without records in K grade score much lower. So, this suggests that the data is not so proper for analyzing our question of interest, since the randomization from grade K to grade 1 is destroyed too much.
+
+
+
+# Acknowledgement {.unnumbered}
+
+This assignment made use of some conclusions and codes in the lecture notes (<https://nbviewer.org/github/ChenShizhe/StatDataScience/blob/master/Notes/Chapter4ANOVA.ipynb>), (<https://nbviewer.org/github/ChenShizhe/StatDataScience/blob/master/Notes/Chapter4ANOVAII.ipynb>), (<https://nbviewer.org/github/ChenShizhe/StatDataScience/blob/master/Notes/Chapter4ANOVAIII.ipynb>). Also, it is discussed with Jingzhi Sun ([edsun\@ucdavis.edu](mailto:edsun@ucdavis.edu){.email}), Zichun Hu ([zichu\@ucdavis.edu](mailto:zichu@ucdavis.edu){.email}), Mingqian Zhang ([pazhang\@ucdavis.edu](mailto:pazhang@ucdavis.edu){.email}) and Shiyu Wu ([shywu\@ucdavis.edu](mailto:shywu@ucdavis.edu){.email}). The github link is https://github.com/troycui23/STA-207-Project
+
+# Reference {.unnumbered}
+
+Mosteller, F. (1995). The Tennessee study of class size in the early school grades. The Future of Children, 5(2), 113--127. <https://doi.org/10.2307/1602360>
+
+Sohn, K. (2016). A review of research on Project STAR and path ahead. School Effectiveness and School Improvement, 27(2), 116--134. <https://doi.org/10.1080/09243453.2014.994643>
+
+# Session info {.unnumbered}
+
+```{r}
+sessionInfo()
+```
